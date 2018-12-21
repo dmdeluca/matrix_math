@@ -5,20 +5,28 @@
 #include <assert.h>
 #include <string.h>
 
-struct matrix {
-	int rows;
-	int cols;
-	double * matrix_data;
-};
-
-typedef struct matrix Matrix;
-
 struct fraction {
 	int numerator;
 	int denominator;
 };
 
 typedef struct fraction Fraction;
+
+struct matrix {
+	int rows;
+	int cols;
+	Fraction * matrix_data;
+};
+
+typedef struct matrix Matrix;
+
+
+
+enum FractionParseState {
+	GETTING_NUMERATOR,
+	GETTING_DENOMINATOR,
+	BETWEEN_FRACTIONS
+};
 
 enum UserChoice {
 	UNDECIDED,
@@ -62,14 +70,14 @@ Matrix	* createMatrix2D(int n, int m);
 Matrix	* userCreateMatrix( );
 Matrix	* userFillMatrix(Matrix * pMatrix);
 int		getUserChoice(void);
-int		findDeterminant(Matrix * pMatrix);
+Fraction		findDeterminant(Matrix * pMatrix);
 int		setSubmatrixValues(int matrixIndex, Matrix * pSubmatrix, Matrix * pMatrix);
-double	* fillZero(double * dArray, int n, int m);
+double	* fillZero(Fraction * dArray, int n, int m);
 int		countDigitsf(double _number);
 void	destroyMatrix2D(Matrix * pMatrix);
 void	multiplyMatrices2D(Matrix * pMatrixA, Matrix * pMatrixB);
 void	addMatrices2D(Matrix * pMatrixA, Matrix * pMatrixB, int doSubtract);
-double	matrixCellProduct(Matrix * pMatrixA, Matrix * pMatrixB, int row, int col);
+Fraction	matrixCellProduct(Matrix * pMatrixA, Matrix * pMatrixB, int row, int col);
 void	printMatrix(Matrix * pMatrix);
 void	clearKeyboardBuffer(void);
 void	printMenu(void);
@@ -87,16 +95,18 @@ void	doSubFractions( );
 void	doMulFractions( );
 void	doDivFractions( );
 void	doQuit( );
+int fractionLength(Fraction pFraction);
 void	doMenuErrorMessage( );
 void	negativeMatrix(Matrix * pMatrix);
-Fraction	fractionSum(Fraction * fractionA, Fraction * fractionB);
-Fraction	fractionDifference(Fraction * fractionA, Fraction * fractionB);
-Fraction	fractionProduct(Fraction * fractionA, Fraction * fractionB);
-Fraction	fractionQuotient(Fraction * fractionA, Fraction * fractionB);
+Fraction	fractionSum(Fraction fractionA, Fraction fractionB);
+Fraction	fractionDifference(Fraction fractionA, Fraction fractionB);
+Fraction	fractionProduct(Fraction fractionA, Fraction fractionB);
+Fraction	fractionQuotient(Fraction fractionA, Fraction fractionB);
 int		reduceFraction(Fraction * pFraction);
-void	printFraction(Fraction * pFraction);
+void	printFraction(Fraction pFraction);
 int		commonFactor(int n, int d);
 //void	doComputeFN( );
+Fraction makeFrac( int,int);
 
 /*
 ==================
@@ -162,6 +172,16 @@ int main(int argc, char * argv[ ]) {
 }
 
 /*
+initialize and return a fraction
+*/
+Fraction makeFrac(int numerator, int denominator) {
+	Fraction returnFraction = { numerator, denominator };
+	return returnFraction;
+}
+
+
+
+/*
 procedure for reducing fractions
 */
 void doReduceFraction( ) {
@@ -217,7 +237,7 @@ void doAddFractions( ) {
 	printf("Please enter a denominator: ");
 	fracB.denominator = getIntBounded(1, 10000, 1);
 
-	Fraction fracC = fractionSum(&fracA, &fracB);
+	Fraction fracC = fractionSum(fracA, fracB);
 
 	printf("%d/%d + %d/%d = %d/%d.\n",
 		   fracA.numerator, fracA.denominator,
@@ -247,7 +267,7 @@ void doSubFractions( ) {
 	fracB.denominator = getIntBounded(1, 10000, 1);
 
 	//	DO CALCULATION
-	Fraction fracC = fractionDifference(&fracA, &fracB);
+	Fraction fracC = fractionDifference(fracA, fracB);
 
 	//	PRINT RESULTS
 	printf("%d/%d - %d/%d = %d/%d.\n",
@@ -273,7 +293,7 @@ void doMulFractions( ) {
 	fracB.numerator = getIntBounded(1, 10000, 1);
 	printf("Please enter a denominator: ");
 	fracB.denominator = getIntBounded(1, 10000, 1);
-	Fraction fracC = fractionProduct(&fracA, &fracB);
+	Fraction fracC = fractionProduct(fracA, fracB);
 
 	//	PRINT RESULTS
 	printf("%d/%d %c %d/%d = %d/%d.\n",
@@ -298,7 +318,7 @@ void doDivFractions( ) {
 	fracB.numerator = getIntBounded(1, 10000, 1);
 	printf("Please enter a denominator: ");
 	fracB.denominator = getIntBounded(1, 10000, 1);
-	Fraction fracC = fractionQuotient(&fracA, &fracB);
+	Fraction fracC = fractionQuotient(fracA, fracB);
 
 	//	PRINT RESULTS
 	printf("%d/%d %c %d/%d = %d/%d.\n",
@@ -319,7 +339,7 @@ int reduceFraction(Fraction * pFraction) {
 	beforeFraction.numerator = pFraction->numerator;
 	beforeFraction.denominator = pFraction->denominator;
 	int cf = 0;
-	for ( int divisor = 1; divisor <= pFraction->denominator && divisor <= pFraction->numerator; divisor++ ) {
+	for ( int divisor = 1; divisor <= abs(pFraction->denominator) && divisor <= abs(pFraction->numerator); divisor++ ) {
 		cf = 1; 
 		while ( cf ) {
 			pFraction->denominator /= cf;
@@ -327,12 +347,20 @@ int reduceFraction(Fraction * pFraction) {
 			cf = commonFactor(pFraction->denominator, pFraction->numerator);
 		} 
 
+		if ( pFraction->denominator < 0 ) {
+			pFraction->denominator = -pFraction->denominator;
+			pFraction->numerator *= -1;
+		}
+
 		//	PRINT RESULTS
-		printf("%d/%d reduced to %d/%d.\n",
+
+				printf("%d/%d reduced to %d/%d.\n",
 				beforeFraction.numerator,
 				beforeFraction.denominator,
 				pFraction->numerator,
 				pFraction->denominator);
+
+	
 		return 0;
 	}
 }
@@ -341,20 +369,24 @@ int reduceFraction(Fraction * pFraction) {
 print a fraction
 @param *pFraction, pointer to the fraction
 */
-void printFraction(Fraction * pFraction) {
-	if ( pFraction->denominator == 1 ) {
-		printf("%d", pFraction->numerator);
+void printFraction(Fraction pFraction) {
+	if ( abs(pFraction.denominator) == 1 ) {
+		printf("%d", pFraction.numerator);
 	} else {
-		printf("%d/%d", pFraction->numerator, pFraction->denominator);
+		printf("%d/%d", pFraction.numerator, pFraction.denominator);
 	}
 }
 
 /*
 calculate the length in characters of a fraction
 */
-int fractionLength(Fraction * pFraction) {
+int fractionLength(Fraction pFraction) {
 	char numStr[100];
-	sprintf_s(numStr, 100, "%d/%d", pFraction->numerator, pFraction->denominator);
+	if ( pFraction.denominator != 1 ) {
+		sprintf_s(numStr, 100, "%d/%d", pFraction.numerator, pFraction.denominator);
+	} else {
+		sprintf_s(numStr, 100, "%d", pFraction.numerator);
+	}
 	return strlen(numStr);
 }
 
@@ -364,6 +396,8 @@ find and return the lowest common factor between two integers
 @param m, the second integer
 */
 int commonFactor(int n, int d) {
+	n = abs(n);
+	d = abs(d);
 	for ( int i = 2; i <= n && i <= d; i++ ) {
 		if ( n%i == 0 && d%i == 0 ) {
 			return i;
@@ -377,10 +411,10 @@ calculate the sum of two fractions
 @param	*fractionA, the first fraction
 @param	*fractionB, the second fraction
 */
-Fraction fractionSum(Fraction * fractionA, Fraction * fractionB) {
+Fraction fractionSum(Fraction fractionA, Fraction fractionB) {
 	Fraction sumFrac;
-	sumFrac.denominator = fractionA->denominator*fractionB->denominator;
-	sumFrac.numerator = fractionB->numerator*fractionA->denominator + fractionA->numerator*fractionB->denominator;
+	sumFrac.denominator = fractionA.denominator*fractionB.denominator;
+	sumFrac.numerator = fractionB.numerator*fractionA.denominator + fractionA.numerator*fractionB.denominator;
 	reduceFraction(&sumFrac);
 	return sumFrac;
 }
@@ -390,10 +424,10 @@ calculate the difference of two fractions
 @param	*fractionA, the first fraction
 @param	*fractionB, the second fraction
 */
-Fraction fractionDifference(Fraction * fractionA, Fraction * fractionB) {
+Fraction fractionDifference(Fraction fractionA, Fraction fractionB) {
 	Fraction difFrac;
-	difFrac.denominator = fractionA->denominator*fractionB->denominator;
-	difFrac.numerator = fractionB->numerator*fractionA->denominator - fractionA->numerator*fractionB->denominator;
+	difFrac.denominator = fractionA.denominator*fractionB.denominator;
+	difFrac.numerator = fractionA.numerator*fractionB.denominator - fractionB.numerator*fractionA.denominator;
 	reduceFraction(&difFrac);
 	return difFrac;
 }
@@ -403,10 +437,10 @@ calculate the product of two fractions
 @param	*fractionA, the first fraction
 @param	*fractionB, the second fraction
 */
-Fraction fractionProduct(Fraction * fractionA, Fraction * fractionB) {
+Fraction fractionProduct(Fraction fractionA, Fraction fractionB) {
 	Fraction prodFrac;
-	prodFrac.denominator = fractionA->denominator*fractionB->denominator;
-	prodFrac.numerator = fractionB->numerator*fractionA->numerator;
+	prodFrac.denominator = fractionA.denominator*fractionB.denominator;
+	prodFrac.numerator = fractionB.numerator*fractionA.numerator;
 	reduceFraction(&prodFrac);
 	return prodFrac;
 }
@@ -416,10 +450,10 @@ calculate the quotient of two fractions
 @param	*fractionA, the first fraction
 @param	*fractionB, the second fraction
 */
-Fraction fractionQuotient(Fraction * fractionA, Fraction * fractionB) {
+Fraction fractionQuotient(Fraction fractionA, Fraction fractionB) {
 	Fraction quotFrac;
-	quotFrac.numerator = fractionB->denominator*fractionA->numerator;
-	quotFrac.denominator = fractionA->denominator*fractionB->numerator;
+	quotFrac.denominator = fractionB.denominator*fractionA.numerator;
+	quotFrac.numerator = fractionA.denominator*fractionB.numerator;
 	reduceFraction(&quotFrac);
 	return quotFrac;
 }
@@ -546,13 +580,13 @@ void doFindDeterminant( ) {
 calculates the determinant of a nxn matrix
 @param *pMatrix, pointer to matrix
 */
-int findDeterminant(Matrix * pMatrix) {
+Fraction findDeterminant(Matrix * pMatrix) {
 	int dimension = pMatrix->cols;
 	assert(pMatrix->cols == pMatrix->rows);
 	assert(pMatrix->cols);
 	assert(pMatrix->rows);
-	int sum = 0;
-	int subdeterminant = 0;
+	Fraction sum = makeFrac(0,1);
+	Fraction subdeterminant = makeFrac(0,1);
 	//	this is an nxn matrix and n > 0
 	switch ( dimension ) {
 	case 1:
@@ -561,15 +595,21 @@ int findDeterminant(Matrix * pMatrix) {
 		break;
 	case 2:
 		//	return ad - bc;
-		return pMatrix->matrix_data[ 0 ] * pMatrix->matrix_data[ 3 ] - pMatrix->matrix_data[ 1 ] * pMatrix->matrix_data[ 2 ];
+		return fractionDifference(	//	ad - bc
+			fractionProduct(pMatrix->matrix_data[ 0 ],pMatrix->matrix_data[ 3 ]),
+			fractionProduct(pMatrix->matrix_data[ 1 ],pMatrix->matrix_data[ 2 ])
+		);
 		break;
 	default:
-		sum = 0;
+		sum = makeFrac(0,1);
 		Matrix * pSubmatrix = createMatrix2D(dimension - 1, dimension - 1);
 		for ( int k = 0; k < dimension; k++ ) {
 			setSubmatrixValues(k, pSubmatrix, pMatrix);	//	set values of submatrix according to value of k
-			subdeterminant = pMatrix->matrix_data[ k ] * findDeterminant(pSubmatrix);
-			sum += subdeterminant * pow(-1, k);	//	add or subtract this depending on k
+			subdeterminant = fractionProduct(
+				pMatrix->matrix_data[ k ],findDeterminant(pSubmatrix)
+			);
+			
+			sum = fractionSum(sum, fractionProduct(subdeterminant, makeFrac((int)pow(-1, k), 1))); //	add or subtract this depending on k
 		}
 		destroyMatrix2D(pSubmatrix);
 		return sum;
@@ -596,7 +636,7 @@ int setSubmatrixValues(int matrixIndex, Matrix * pSubmatrix, Matrix * pMatrix) {
 			iSubmatrix++;
 		}
 	}
-	return;
+	return 0;
 }
 
 /*
@@ -613,18 +653,20 @@ void doFindInverse( ) {
 	Matrix * pMatrixA = userCreateMatrix( );
 
 	if ( pMatrixA ) {
-		int detA = findDeterminant(pMatrixA);
+		Fraction detA = findDeterminant(pMatrixA);
 		if ( pMatrixA->cols == pMatrixA->rows && pMatrixA->cols && pMatrixA->rows ) {
-			if ( detA ) {
+			if ( detA.numerator != 0 && detA.denominator != 0 && pMatrixA->rows == 2) {
 				Matrix * inverseMatrix = createMatrix2D(pMatrixA->rows, pMatrixA->cols);
-				for ( int i = 0; i < pMatrixA->cols*pMatrixA->rows; i++ ) {
-					inverseMatrix->matrix_data[ i ] = pMatrixA->matrix_data[ i ] * ( 1.0 / detA );
-				}
+				inverseMatrix->matrix_data[ 0 ] = fractionProduct(pMatrixA->matrix_data[ 3 ], makeFrac(1, detA.numerator));
+				inverseMatrix->matrix_data[ 1 ] = fractionProduct(pMatrixA->matrix_data[ 1 ], makeFrac(-1, detA.numerator));
+				inverseMatrix->matrix_data[ 2 ] = fractionProduct(pMatrixA->matrix_data[ 2 ], makeFrac(-1, detA.numerator));
+				inverseMatrix->matrix_data[ 3 ] = fractionProduct(pMatrixA->matrix_data[ 0 ], makeFrac(1, detA.numerator));
+
 				printf("[INVERSE OF MATRIX A]:\n");
 				printMatrix(inverseMatrix);
 				destroyMatrix2D(inverseMatrix);
 			} else {
-				printf("[INVERSE OF MATRIX A]: DNE\n");
+				printf("[INVERSE OF MATRIX A]: DNE OR CANNOT COMPUTE\n");
 			}
 		} else {
 			printf("ERROR: Cannot find determinant of %dx%d matrix.\n", pMatrixA->rows, pMatrixA->cols);
@@ -673,7 +715,7 @@ Matrix * createMatrix2D(int n, int m) {
 	Matrix * new_matrix = ( Matrix* ) malloc(sizeof(Matrix));
 	new_matrix->rows = n;
 	new_matrix->cols = m;
-	double * allocated_matrix = ( double * ) malloc(sizeof(double)*n*m);
+	Fraction * allocated_matrix = ( Fraction * ) malloc(sizeof(Fraction)*n*m);
 	fillZero(allocated_matrix,n,m);
 	new_matrix->matrix_data = allocated_matrix;
 	//	printf_s("Matrix [%dx%d] created",n,m);
@@ -688,10 +730,11 @@ negate all values in a matrix
 void negativeMatrix(Matrix * pMatrix) {
 	for ( int i = 0; i < pMatrix->rows; i++ ) {
 		for ( int j = 0; j < pMatrix->cols; j++ ) {
-			pMatrix->matrix_data[ i*pMatrix->cols + j ] *= -1;
+			pMatrix->matrix_data[ i*pMatrix->cols + j ] = fractionProduct(pMatrix->matrix_data[ i*pMatrix->cols + j ],makeFrac( -1,1));
 		}
 	}
 }
+
 
 /*
 calculate and print the matrix sum of two matrices
@@ -716,7 +759,7 @@ void addMatrices2D(Matrix * pMatrixA, Matrix * pMatrixB, int doSubtract) {
 		for ( int j = 0; j < b_cols; j++ ) {
 			//	calculate the value for each spot in the matrix
 			matrixIndex = i * b_cols + j; //	find the index to update
-			pSumMatrix->matrix_data[ matrixIndex ] = pMatrixA->matrix_data[ matrixIndex ] + pMatrixB->matrix_data[ matrixIndex ];
+			pSumMatrix->matrix_data[ matrixIndex ] = fractionSum(pMatrixA->matrix_data[ matrixIndex ],pMatrixB->matrix_data[ matrixIndex ]);
 		}
 	}
 	if ( doSubtract ) {
@@ -744,18 +787,19 @@ void multiplyMatrices2D(Matrix * pMatrixA, Matrix * pMatrixB) {
 		return;
 	}
 	Matrix * pProductMatrix = createMatrix2D(a_rows, b_cols);
-	int	sum = 0;
-	int	pProductMatrixIndex, factorA, factorB;
+	Fraction	sum = makeFrac(0, 1);
+	int	pProductMatrixIndex;
+	Fraction factorA, factorB;
 	for ( int i = 0; i < a_rows; i++ ) {
 		for ( int j = 0; j < b_cols; j++ ) {
 			//	calculate the value for each spot in the matrix
 			pProductMatrixIndex = i * b_cols + j; //	find the index to update
-			sum = 0;
+			sum = makeFrac(0,1);
 			for ( int k = 0; k < a_cols; k++ ) {
 				//	increment sum by products of matrix pairs
 				factorA = pMatrixA->matrix_data[ i*a_cols + k ];
 				factorB = pMatrixB->matrix_data[ k*b_cols + j ];
-				sum += factorA * factorB;
+				sum = fractionSum(sum,fractionProduct(factorA,factorB));
 			}
 			pProductMatrix->matrix_data[ pProductMatrixIndex ] = sum;
 		}
@@ -775,12 +819,12 @@ calculate the product for one cell of a product matrix
 @param row, the row of the cell in the product matrix
 @param col, the column of the cell in the product matrix
 */
-double matrixCellProduct(Matrix * pMatrixA, Matrix * pMatrixB, int row, int col) {
-	double sum = 0;
+Fraction matrixCellProduct(Matrix * pMatrixA, Matrix * pMatrixB, int row, int col) {
+	Fraction sum = makeFrac(0,1);
 	int per_row = pMatrixA->rows;
 	int per_col = pMatrixB->cols;
 	for ( int i = 0; i < pMatrixA->rows; i++ ) {
-		sum += pMatrixA->matrix_data[ row*per_col + i ] * pMatrixB->matrix_data[ col + i * per_row ];
+		sum = fractionSum(sum,fractionProduct(pMatrixA->matrix_data[ row*per_col + i ],pMatrixB->matrix_data[ col + i * per_row ]));
 	}
 	return sum;
 }
@@ -816,7 +860,7 @@ int getMostDigits(Matrix * pMatrix) {
 	int highest = 0;
 	int digits = 0;
 	for ( int i = 0; i < pMatrix->rows*pMatrix->cols; i++ ) {
-		digits = countDigits(pMatrix->matrix_data[ i ]);
+		digits = fractionLength(pMatrix->matrix_data[ i ]);
 		if ( highest < digits ) {
 			highest = digits;
 		}
@@ -873,6 +917,48 @@ Matrix * userFillMatrix(Matrix * pMatrix) {
 	printf("userFillMatrix was called.\n");
 	int rows = pMatrix->rows;
 	int cols = pMatrix->cols;
+	char chbuf = 'a';
+	int numbuf=0;
+	int denbuf=1;
+	int valid_numerator = 0;
+	int valid_denominator = 0;
+
+	enum FractionParseState fps = BETWEEN_FRACTIONS;
+
+	for ( int counter = 0; counter < rows*cols; ) {
+
+		valid_numerator = 0;
+
+		while ( !valid_numerator ) {
+			valid_numerator = scanf_s("%d", &numbuf);
+		}
+
+		while ( chbuf != '/' && chbuf != ' ' && chbuf != '\n' ) {
+			scanf_s("%c", &chbuf);
+		}
+
+		switch ( chbuf ) {
+		case '/':
+		default:
+			valid_denominator = 0;
+			while ( !valid_denominator ) {
+				valid_denominator = scanf_s("%d", &denbuf);
+			}
+		case ' ':
+		case '\n':
+			if ( !denbuf )
+				denbuf = 1;
+			pMatrix->matrix_data[ counter ].numerator = numbuf;
+			pMatrix->matrix_data[ counter ].denominator = denbuf;
+			numbuf = 0;
+			denbuf = 1;
+			chbuf = 0;
+			counter++;
+			break;
+		}
+	}
+
+	/*
 	int counter = 0;
 	double dBuffer = 0;
 	int valid_input = 0;
@@ -887,6 +973,7 @@ Matrix * userFillMatrix(Matrix * pMatrix) {
 			clearKeyboardBuffer( );
 		}
 	}
+	*/
 
 	clearKeyboardBuffer( );
 	
@@ -954,26 +1041,31 @@ void printMatrix(Matrix * pMatrix) {
 	}
 
 	//int width = getMostDigits(pMatrix)+1;
-	int width = 8;
+	int width = getMostDigits(pMatrix)+2;
 
 	int rows = pMatrix->rows;
 	int cols = pMatrix->cols;
 
 	//	print top corners
 	printf("\n%c", 218);
+
 	for ( int i = 0; i < cols; i++ ) {
 		printf("%*s", width, "");
 	}
+
 	printf("%*s%c",width-1,"", 191);
 
 	for ( int i = 0; i < rows*cols; i++ ) {
+		int fraclength = fractionLength(pMatrix->matrix_data[ i ]);
 		if ( i%cols == 0 ) {
 			if ( i > cols-1 ) {
 				printf("%*s%c",width-1,"", 179);
 			}
 			printf("\n%c", 179);
 		}
-		printf("%*s%*g",3,"", width-3, pMatrix->matrix_data[ i ]); // fix this
+		printf("%*s", width - fraclength,"" ); // fix this
+		printFraction(pMatrix->matrix_data[ i ]);
+
 	}
 
 	//	print bottom corners
@@ -998,13 +1090,14 @@ void destroyMatrix2D(Matrix * pMatrix) {
 
 /*
 fill an array with zeroes
-@param	*dArray, the double array
+@param	*fArray, the rational array
 @param	n, array rows
 @param	m, array columns (false indexing)
 */
-double * fillZero(double * dArray, int n, int m) {
+double * fillZero(Fraction * fArray, int n, int m) {
 	for ( int i = 0; i < n*m; i++) {
-		dArray[i] = 0;
+		fArray[ i ].denominator = 1;
+		fArray[ i ].numerator = 0;
 	}
-	return dArray;
+	return fArray;
 }
